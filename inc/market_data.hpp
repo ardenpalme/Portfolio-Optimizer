@@ -6,13 +6,10 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstdio>
+#include <Eigen/Dense>
 
-#include "simdjson.h"
-#include "libcurl.hpp"
 
-struct Market_Data
-{
-    std::vector<double> price_series;
+struct Market_Data {
     std::vector<double> returns;
     std::string ticker;
 
@@ -23,38 +20,39 @@ struct Market_Data
     friend std::ostream& operator<<(std::ostream &os, const Market_Data &m_data);
 };
 
-namespace simdjson {
+class Portfolio {
+    std::vector<Market_Data> assets;
+    Eigen::VectorXd weights;
+    Eigen::MatrixXd returns;
+    Eigen::VectorXd mean; 
+    Eigen::MatrixXd covariance;
 
-    template <>
-    simdjson_inline simdjson_result<std::vector<double>>
-    simdjson::ondemand::value::get() noexcept
-    {
-        std::vector<double> vec;
+public:
+    Portfolio(std::vector<Market_Data> _assets) : assets{_assets} {
+        size_t num_assets = assets.size();
+        size_t data_len = assets.at(0).returns.size();
+        std::cout << "N = " << num_assets << " M = " << data_len << std::endl;
 
-        ondemand::array arr;
-        auto error = get_array().get(arr);
-        if (error) return error;
+        Eigen::MatrixXd ret(num_assets, data_len);
+        int row_idx = 0;
+        std::for_each(assets.begin(), assets.end(), [&](const auto &m_data){
+            std::vector<double> returns_vec = m_data.returns;
+            Eigen::Map<Eigen::RowVectorXd> row_vec(returns_vec.data(), data_len);
+            ret.row(row_idx++) = row_vec;
+        });
 
-        for (auto ele : arr) {
-            ondemand::object obj; 
-            error = ele.get_object().get(obj);
-            if (error) return error;
+        returns = std::move(ret);
 
-            for (auto field : obj) {
-                double close_price;
-                simdjson::ondemand::raw_json_string key;
-                error = field.key().get(key);
-                if (error) return error;
+        mean = returns.rowwise().mean();  
+        Eigen::MatrixXd centered = returns.colwise() - mean; // (X- X_bar)
 
-                if (key == "c") {
-                    error = field.value().get_double().get(close_price);
-                    vec.push_back(close_price);
-                    if (error) return error;
-                }
-            }
-        }
-        return vec;
+        int M = returns.cols();
+        covariance = (centered * centered.transpose()) / (M - 1);
     }
+
+    bool optimize_sharpe(uint32_t num_epochs) { }
+
+    friend std::ostream& operator<<(std::ostream &os, const Portfolio &port);
 };
 
 #endif /* __MARKET_DATA_HPP__ */

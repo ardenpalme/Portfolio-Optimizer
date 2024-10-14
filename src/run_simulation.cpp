@@ -7,9 +7,22 @@ int main(int argc, char *argv[])
 {
     using namespace std;
 
-    Market_Data m_data("X:BTCUSD");
-    m_data.get_price_series_since("2023-04-10");
-    cout << m_data << endl;
+    std::string assets[] = {
+        {"X:BTCUSD"},
+        {"X:ETHUSD"}
+    };
+
+    std::vector<Market_Data> market_data_vec;
+    for(auto asset : assets) {
+        Market_Data m_data(asset);
+        m_data.get_price_series_since("2023-04-10");
+        cout << m_data << endl;
+        market_data_vec.push_back(m_data);
+    }
+
+    Portfolio portfolio(market_data_vec);
+    cout << portfolio << std::endl;
+
 
     return 0;
 }

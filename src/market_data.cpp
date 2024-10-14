@@ -1,7 +1,12 @@
+#include <Eigen/Dense>
+
 #include "market_data.hpp"
+#include "simdjson.h"
+#include "libcurl.hpp"
 
 bool Market_Data::get_price_series_since(const std::string &start_date)
 {
+    std::vector<double> price_series;
     std::string api_key, end_date;
 
     const std::chrono::time_point now{std::chrono::system_clock::now()};
@@ -69,21 +74,100 @@ bool Market_Data::get_price_series_since(const std::string &start_date)
         }
     }
 
+    auto iter = price_series.begin();
+    auto prev_iter = price_series.end();
+
+    while(iter != price_series.end()) {
+        if(prev_iter == price_series.end()) {
+            prev_iter = iter;
+            iter = std::next(iter);
+            continue;
+        }
+
+        double percent_diff = (*iter - *prev_iter) / *prev_iter; 
+        returns.push_back(percent_diff);
+
+        prev_iter = iter;
+        iter = std::next(iter);
+    }
+
     return true;
 }
 
 std::ostream& operator<<(std::ostream &os, const Market_Data &m_data) {
-    if(m_data.price_series.size() == 0 ) return os;
-
-    size_t count = 2;
-    auto data_iter = m_data.price_series.begin();
-    os << m_data.ticker << " price series [";
-    while (data_iter != m_data.price_series.begin() + count) {
-        os << *data_iter;
-        if (data_iter + 1 != m_data.price_series.begin() + count) os << ", ";
-        data_iter++;
+    if(m_data.returns.size() > 0 ) {
+        size_t count = 2;
+        auto data_iter = m_data.returns.begin();
+        os << m_data.ticker << " returns [";
+        while (data_iter != m_data.returns.begin() + count) {
+            os << *data_iter;
+            if (data_iter + 1 != m_data.returns.begin() + count) os << ", ";
+            data_iter++;
+        }
+        data_iter = m_data.returns.end() - 1;
+        os << " ... " << *data_iter << "] (" << m_data.returns.size() << " total)" << std::endl;
     }
-    data_iter = m_data.price_series.end() - 1;
-    os << " ... " << *data_iter << "] (" << m_data.price_series.size() << " total)";
+
+    return os;
+}
+
+namespace simdjson {
+
+    template <>
+    simdjson_inline simdjson_result<std::vector<double>>
+    simdjson::ondemand::value::get() noexcept
+    {
+        std::vector<double> vec;
+
+        ondemand::array arr;
+        auto error = get_array().get(arr);
+        if (error) return error;
+
+        for (auto ele : arr) {
+            ondemand::object obj; 
+            error = ele.get_object().get(obj);
+            if (error) return error;
+
+            for (auto field : obj) {
+                double close_price;
+                simdjson::ondemand::raw_json_string key;
+                error = field.key().get(key);
+                if (error) return error;
+
+                if (key == "c") {
+                    error = field.value().get_double().get(close_price);
+                    vec.push_back(close_price);
+                    if (error) return error;
+                }
+            }
+        }
+        return vec;
+    }
+};
+
+std::ostream& operator<<(std::ostream &os, const Portfolio &port) {
+    int M_max = 5;
+    std::cout << "[returns]: " << port.returns.rows() << " x " << port.returns.cols() << std::endl;
+    int j=0;
+    for(auto row : port.returns.rowwise()) {
+        int i=0;
+        for(auto ele : row) {
+            std::cout << ele << " ";
+            if(++i > M_max) break;
+        }
+        std::cout << std::endl;
+        if(++j > M_max) break;
+    }
+
+    std::cout << std::endl;
+
+    std::cout << "[covariance]: " << std::endl;
+    for(auto row : port.covariance.rowwise()) {
+        for(auto ele : row) {
+            std::cout << ele << " ";
+        }
+        std::cout << std::endl;
+    }
+
     return os;
 }

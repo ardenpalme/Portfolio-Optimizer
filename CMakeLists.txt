@@ -18,6 +18,14 @@ FetchContent_Declare(
   GIT_TAG curl-8_10_1  
 )
 
+FetchContent_Declare(
+  eigen
+  GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+  GIT_SHALLOW TRUE
+  GIT_TAG 3.4
+)
+
+FetchContent_MakeAvailable(eigen)
 FetchContent_MakeAvailable(libcurl) 
 FetchContent_MakeAvailable(simdjson)
 
@@ -37,6 +45,6 @@ file(GLOB SRC_FILES "${SRC_DIR}/*.cpp")
 add_executable(${PROJ} ${SRC_FILES})
 
 target_include_directories(${PROJ} PRIVATE ${INC_DIR} ${libcurl_SOURCE_DIR}/include)
-target_link_libraries(${PROJ} PRIVATE libcurl)
+target_link_libraries(${PROJ} PRIVATE libcurl eigen)
 
 set_target_properties(${PROJ} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${BIN_DIR})
