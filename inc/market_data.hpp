@@ -24,10 +24,10 @@ struct Market_Data
         const std::chrono::time_point now{std::chrono::system_clock::now()};
         const std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(now)};
  
-        end_date = std::format("{}-{}-{}", ymd.year(), ymd.month(), ymd.day());
+        end_date = std::format("{}",ymd);
 
         const char* api_key_ptr;
-        if((api_key_ptr = std::getenv("POLYGON_API_KEY")) == NULL){
+        if((api_key_ptr = std::getenv("POLYGON_API_KEY")) == NULL) {
             std::cerr << "Invalid API Key for polygon.io market data service" << std::endl;
             return false;
         }
@@ -41,7 +41,6 @@ struct Market_Data
             api_key);
 
         std::cout << polygon_req << std::endl;
-
 
         simdjson::ondemand::document json_doc;
         simdjson::ondemand::parser parser;
@@ -58,16 +57,18 @@ struct Market_Data
         simdjson::padded_string padded_data(*json_str_ptr);
         auto error = parser.iterate(padded_data).get(json_doc);
 
-        simdjson::ondemand::object obj;
-        json_doc.get_object().get(obj);
+        /*
         std::string_view status_str;
-        obj["status"].get_string().get(status_str);
+        error = json_doc["status"].get_string(status_str);
         if(status_str != "OK") {
             std::cerr << "Market Data request error " << status_str << std::endl;
             return false;
         }
+        json_doc.rewind();
+        */
 
-        for (auto field : obj) {
+        simdjson::ondemand::object json_obj = json_doc.get_object();
+        for (auto field : json_obj) {
             simdjson::ondemand::raw_json_string key;
             error = field.key().get(key);
             if (error) return error;
@@ -90,23 +91,28 @@ namespace simdjson {
     simdjson_inline simdjson_result<std::vector<double>>
     simdjson::ondemand::value::get() noexcept
     {
-        ondemand::object obj;
-        auto error = get_object().get(obj);
-        if (error) return error;
-
         std::vector<double> vec;
 
-        for (auto field : obj)
-        {
-            double close_price;
-            raw_json_string key;
+        ondemand::array arr;
+        auto error = get_array().get(arr);
+        if (error) return error;
 
-            error = field.key().get(key);
+        for (auto ele : arr) {
+            ondemand::object obj; 
+            error = ele.get_object().get(obj);
             if (error) return error;
 
-            if (key == "c") {
-                error = field.value().get_double().get(close_price);
-                vec.push_back(close_price);
+            for (auto field : obj) {
+                double close_price;
+                simdjson::ondemand::raw_json_string key;
+                error = field.key().get(key);
+                if (error) return error;
+
+                if (key == "c") {
+                    error = field.value().get_double().get(close_price);
+                    vec.push_back(close_price);
+                    if (error) return error;
+                }
             }
         }
         return vec;

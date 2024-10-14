@@ -1,5 +1,5 @@
 # docker build -t cpp-project .
-# docker run -it --rm -v "$(pwd):/home/ubuntu" cpp-project /bin/bash
+# docker run -it --rm -v "$(pwd):/home/ubuntu" -e POLYGON_API_KEY=<api_key> cpp-project /bin/bash
 
 # Use an official Ubuntu as a base image
 FROM ubuntu:latest
@@ -25,6 +25,12 @@ RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 && \
 
 # Copy the contents of the local repository to /ubuntu/home in the image
 COPY . /home/ubuntu
+
+# Make the entrypoint script executable
+RUN chmod a+x /home/ubuntu/entrypoint.sh
+
+# Set entrypoint to run the script with user input as argument
+ENTRYPOINT ["/home/ubuntu/entrypoint.sh"]
 
 # Set working directory
 WORKDIR /home/ubuntu/
