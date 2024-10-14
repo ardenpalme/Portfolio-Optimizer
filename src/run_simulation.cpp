@@ -3,22 +3,6 @@
 #include "simdjson.h"
 #include "market_data.hpp"
 
-std::ostream& operator<<(std::ostream &os, const Market_Data &m_data) {
-    if(m_data.price_series.size() == 0 ) return os;
-
-    size_t count = 2;
-    auto data_iter = m_data.price_series.begin();
-    os << "[";
-    while (data_iter != m_data.price_series.begin() + count) {
-        os << *data_iter;
-        if (data_iter + 1 != m_data.price_series.begin() + count) os << ", ";
-        data_iter++;
-    }
-    data_iter = m_data.price_series.end() - 1;
-    os << " ... " << *data_iter << "] (" << m_data.price_series.size() << " total)";
-    return os;
-}
-
 int main(int argc, char *argv[])
 {
     using namespace std;
