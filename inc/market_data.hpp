@@ -22,7 +22,7 @@ struct Market_Data {
 
 class Portfolio {
     std::vector<Market_Data> assets;
-    Eigen::VectorXd weights;
+    Eigen::RowVectorXd weights;
     Eigen::MatrixXd returns;
     Eigen::VectorXd mean; 
     Eigen::MatrixXd covariance;
@@ -48,9 +48,14 @@ public:
 
         int M = returns.cols();
         covariance = (centered * centered.transpose()) / (M - 1);
+
+        std::srand(std::time(0)); 
+        Eigen::RowVectorXd init_weights = Eigen::RowVectorXd::Random(2).cwiseAbs();
+        init_weights /= init_weights.sum();
+        weights = std::move(init_weights);
     }
 
-    bool optimize_sharpe(uint32_t num_epochs) { }
+    bool optimize_sharpe(uint32_t num_epochs);
 
     friend std::ostream& operator<<(std::ostream &os, const Portfolio &port);
 };

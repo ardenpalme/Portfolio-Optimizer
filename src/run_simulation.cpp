@@ -5,7 +5,6 @@
 
 int main(int argc, char *argv[])
 {
-    /*
     using namespace std;
 
     std::string assets[] = {
@@ -23,20 +22,8 @@ int main(int argc, char *argv[])
 
     Portfolio portfolio(market_data_vec);
     cout << portfolio << std::endl;
-    */
 
-    using namespace AutoDiff;
-    // f(x1,x2) = x1 * (x2  ** (-1/2))
-    Variable x1(1), x2(25);
-    Power p1(&x2, -0.5);
-    Multiply z(&x1, &p1);
-
-    z.evaluate();
-    std::cout << "f(x1 = " << x1.value << ", x2 = " << x2.value << ") = " << z.value << std::endl;
-
-    z.derive(1);
-    std::cout << "∂f/∂x1 = " << x1.partial << std::endl
-              << "∂f/∂x2 = " << x2.partial << std::endl;
+    portfolio.optimize_sharpe(1);
 
     return 0;
 }

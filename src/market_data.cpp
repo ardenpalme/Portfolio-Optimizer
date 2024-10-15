@@ -1,5 +1,7 @@
 #include <Eigen/Dense>
+#include <ctime>
 
+#include "auto_diff.hpp"
 #include "market_data.hpp"
 #include "simdjson.h"
 #include "libcurl.hpp"
@@ -170,4 +172,22 @@ std::ostream& operator<<(std::ostream &os, const Portfolio &port) {
     }
 
     return os;
+}
+
+
+bool Portfolio::optimize_sharpe(uint32_t num_epochs) { 
+    AutoDiff::Variable w1(weights); 
+    AutoDiff::LinearProd w2(&w1, mean);
+    AutoDiff::VecT_Matrix_Vec w3(&w1, covariance);
+    AutoDiff::Power w4(&w3, -0.5);
+    AutoDiff::Multiply w5(&w4, &w2);
+
+    Eigen::VectorXd seed = Eigen::VectorXd::Ones(weights.cols());
+
+    w5.evaluate();
+    std::cout << "f(w = [" << weights << "]) = " << w5.scalar_value << std::endl;
+
+    w5.derive(seed);
+    std::cout << "∂f/∂w = " << w1.partial << std::endl;
+    return true; 
 }

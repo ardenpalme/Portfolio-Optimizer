@@ -1,108 +1,151 @@
 #include <iostream>
 #include <cmath>
 #include <numbers>
+#include <Eigen/Dense>
 
 namespace AutoDiff
 {
     struct Expression
     {
-        double value;
+        bool is_vector; // is the expression result a scalar or vector?
+        double scalar_value;
+        Eigen::RowVectorXd value;
         virtual void evaluate() = 0;
-        virtual void derive(double seed) = 0;
+        virtual void derive(const Eigen::RowVectorXd &seed) = 0;
     };
 
     struct Variable : public Expression
     {
-        double partial;
-        Variable(double value)
-        {
-            this->value = value;
-            partial = 0.0f;
+        Eigen::RowVectorXd partial;
+        Variable(const Eigen::RowVectorXd &_value) {
+            value = _value;
+            partial = Eigen::RowVectorXd::Zero(_value.cols());
+            is_vector = true;
         }
-        void evaluate() {}
-        void derive(double seed)
-        {
-            partial += seed;
+        void evaluate() {
+            std::cout << "Variable: " << value << std::endl;
+        }
+        void derive(const Eigen::RowVectorXd &seed) {
+            std::cout << "ICI\n ";
+            partial = partial + seed;
+            std::cout << "LA\n ";
         }
     };
 
-    struct Plus : public Expression
+    struct LinearProd : public Expression
     {
-        Expression *a, *b;
-        Plus(Expression *a, Expression *b) : a(a), b(b) {}
-        void evaluate()
-        {
-            a->evaluate();
-            b->evaluate();
-            value = a->value + b->value;
+        Expression *expr;
+        Eigen::RowVectorXd vec;
+
+        LinearProd(Expression *_expr, const Eigen::RowVectorXd &_vec) : expr{_expr}, vec{_vec} {
+            is_vector = false;
         }
-        void derive(double seed)
-        {
-            a->derive(seed);
-            b->derive(seed);
+
+        void evaluate() {
+            expr->evaluate();
+            scalar_value = expr->value.dot(vec);
+            if(!is_vector) std::cout << "LinearProd: " << scalar_value << std::endl;
+            else std::cout << "LinearProd: " << value << std::endl;
+        }
+
+        void derive(const Eigen::RowVectorXd &seed) {
+            std::cout << "deriv LinearProd:\n";
+            if(expr->is_vector) expr->derive(vec.array() * seed.array());
+            else expr->derive(expr->scalar_value * seed.array());
+        }
+    };
+
+    struct VecT_Matrix_Vec : public Expression {
+        Expression *expr;
+        Eigen::MatrixXd A;
+
+        VecT_Matrix_Vec(Expression *_expr, const Eigen::MatrixXd &_A) : expr{_expr}, A{_A} {
+            is_vector = false;
+        }
+
+        void evaluate() {
+            expr->evaluate();
+            scalar_value = expr->value * A * expr->value.transpose();
+            if(!is_vector) std::cout << "VecT_M_Vec: " << scalar_value << std::endl;
+            else std::cout << "VecT_M_Vec: " << value << std::endl;
+        }
+
+        void derive(const Eigen::RowVectorXd &seed) {
+            std::cout << "deriv QuadProd:\n";
+            if(expr->is_vector){
+                Eigen::RowVectorXd grad = 2 * (A * expr->value.transpose()).transpose();
+                expr->derive(grad.array() * seed.array());
+            }else{
+                expr->derive(expr->scalar_value * seed.array());
+            }
+        }
+    };
+
+    struct Power : public Expression
+    {
+        Expression *expr;
+        double exp;
+        Power(Expression *_expr, double exp) : expr{_expr}, exp{exp} {
+            is_vector = true;
+        }
+        void evaluate() {
+            expr->evaluate();
+            if(expr->is_vector) {
+                value = expr->value.array().pow(-0.5);
+                is_vector = true;
+                std::cout << "Power: " << value << std::endl;
+
+            } else {
+                scalar_value = std::pow(expr->scalar_value,-0.5);
+                is_vector = false;
+                std::cout << "Power: " << scalar_value << std::endl;
+            }
+
+        }
+        void derive(const Eigen::RowVectorXd &seed) {
+            std::cout << "deriv Pow:\n";
+            if(expr->is_vector){
+                Eigen::RowVectorXd grad = expr->value.array().pow(-1.5) * -0.5;
+                expr->derive(grad.array() * seed.array());
+            }else{
+                expr->derive(expr->scalar_value * seed.array());
+            }
         }
     };
 
     struct Multiply : public Expression
     {
         Expression *a, *b;
-        Multiply(Expression *a, Expression *b) : a(a), b(b) {}
-        void evaluate()
-        {
+        Multiply(Expression *a, Expression *b) : a(a), b(b) {
+            is_vector = true;
+        }
+        void evaluate() {
             a->evaluate();
             b->evaluate();
-            value = a->value * b->value;
-        }
-        void derive(double seed)
-        {
-            a->derive(b->value * seed);
-            b->derive(a->value * seed);
-        }
-    };
 
-    struct Sine : public Expression
-    {
-        Expression *a;
-        Sine(Expression *a) : a(a) {}
-        void evaluate()
-        {
-            a->evaluate();
-            value = std::sin(a->value);
-        }
-        void derive(double seed)
-        {
-            a->derive(std::cos(a->value) * seed);
-        }
-    };
+            if (a->is_vector && b->is_vector) {
+                value = a->value.array() * b->value.array();  
 
-    struct Power : public Expression
-    {
-        Expression *a;
-        double exp;
-        Power(Expression *a, double exp) : a{a}, exp{exp} {}
-        void evaluate()
-        {
-            a->evaluate();
-            value = std::pow(a->value, exp);
+            } else if (!a->is_vector && b->is_vector) {
+                value = b->value * a->scalar_value;  
+
+            } else if (a->is_vector && !b->is_vector) {
+                value = a->value * b->scalar_value;  
+            }else{
+                scalar_value = a->scalar_value * b->scalar_value;
+                is_vector = false;
+            }
+
+            std::cout << "Mult: " << scalar_value << std::endl;
         }
-        void derive(double seed)
-        {
-            a->derive(exp * std::pow(a->value, (exp - 1.0)) * seed);
+
+        void derive(const Eigen::RowVectorXd &seed) {
+            std::cout << "deriv Mult:\n";
+            if(b->is_vector) a->derive(b->value.array() * seed.array());
+            else a->derive(b->scalar_value * seed.array());
+
+            if(a->is_vector) b->derive(a->value.array() * seed.array());
+            else b->derive(a->scalar_value * seed.array());
         }
     };
 }
-/*
-
-    // f(x1,x2) = x1 * x2 + sin(x1)
-    Variable x1(3.1415926), x2(1);
-    Multiply m1(&x1, &x2);
-    Sine s1(&x1);
-    Plus z(&m1, &s1);
-
-    z.evaluate();
-    std::cout << "f(x1 = " << x1.value << ", x2 = " << x2.value << ") = " << z.value << std::endl;
-
-    z.derive(1);
-    std::cout << "∂f/∂x1 = " << x1.partial << std::endl
-              << "∂f/∂x2 = " << x2.partial << std::endl;
-*/
