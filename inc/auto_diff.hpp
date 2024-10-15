@@ -22,13 +22,9 @@ namespace AutoDiff
             partial = Eigen::RowVectorXd::Zero(_value.cols());
             is_vector = true;
         }
-        void evaluate() {
-            std::cout << "Variable: " << value << std::endl;
-        }
+        void evaluate() { }
         void derive(const Eigen::RowVectorXd &seed) {
-            std::cout << "ICI\n ";
             partial = partial + seed;
-            std::cout << "LA\n ";
         }
     };
 
@@ -44,12 +40,9 @@ namespace AutoDiff
         void evaluate() {
             expr->evaluate();
             scalar_value = expr->value.dot(vec);
-            if(!is_vector) std::cout << "LinearProd: " << scalar_value << std::endl;
-            else std::cout << "LinearProd: " << value << std::endl;
         }
 
         void derive(const Eigen::RowVectorXd &seed) {
-            std::cout << "deriv LinearProd:\n";
             if(expr->is_vector) expr->derive(vec.array() * seed.array());
             else expr->derive(expr->scalar_value * seed.array());
         }
@@ -66,12 +59,9 @@ namespace AutoDiff
         void evaluate() {
             expr->evaluate();
             scalar_value = expr->value * A * expr->value.transpose();
-            if(!is_vector) std::cout << "VecT_M_Vec: " << scalar_value << std::endl;
-            else std::cout << "VecT_M_Vec: " << value << std::endl;
         }
 
         void derive(const Eigen::RowVectorXd &seed) {
-            std::cout << "deriv QuadProd:\n";
             if(expr->is_vector){
                 Eigen::RowVectorXd grad = 2 * (A * expr->value.transpose()).transpose();
                 expr->derive(grad.array() * seed.array());
@@ -93,17 +83,14 @@ namespace AutoDiff
             if(expr->is_vector) {
                 value = expr->value.array().pow(-0.5);
                 is_vector = true;
-                std::cout << "Power: " << value << std::endl;
 
             } else {
                 scalar_value = std::pow(expr->scalar_value,-0.5);
                 is_vector = false;
-                std::cout << "Power: " << scalar_value << std::endl;
             }
 
         }
         void derive(const Eigen::RowVectorXd &seed) {
-            std::cout << "deriv Pow:\n";
             if(expr->is_vector){
                 Eigen::RowVectorXd grad = expr->value.array().pow(-1.5) * -0.5;
                 expr->derive(grad.array() * seed.array());
@@ -135,12 +122,9 @@ namespace AutoDiff
                 scalar_value = a->scalar_value * b->scalar_value;
                 is_vector = false;
             }
-
-            std::cout << "Mult: " << scalar_value << std::endl;
         }
 
         void derive(const Eigen::RowVectorXd &seed) {
-            std::cout << "deriv Mult:\n";
             if(b->is_vector) a->derive(b->value.array() * seed.array());
             else a->derive(b->scalar_value * seed.array());
 

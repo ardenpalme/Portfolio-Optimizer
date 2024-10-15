@@ -176,18 +176,22 @@ std::ostream& operator<<(std::ostream &os, const Portfolio &port) {
 
 
 bool Portfolio::optimize_sharpe(uint32_t num_epochs) { 
-    AutoDiff::Variable w1(weights); 
-    AutoDiff::LinearProd w2(&w1, mean);
-    AutoDiff::VecT_Matrix_Vec w3(&w1, covariance);
-    AutoDiff::Power w4(&w3, -0.5);
-    AutoDiff::Multiply w5(&w4, &w2);
+    double learning_rate = 0.2;
 
-    Eigen::VectorXd seed = Eigen::VectorXd::Ones(weights.cols());
+    for(int i=0; i<num_epochs; i++) {
+        AutoDiff::Variable w1(weights); 
+        AutoDiff::LinearProd w2(&w1, mean);
+        AutoDiff::VecT_Matrix_Vec w3(&w1, covariance);
+        AutoDiff::Power w4(&w3, -0.5);
+        AutoDiff::Multiply w5(&w4, &w2);
 
-    w5.evaluate();
-    std::cout << "f(w = [" << weights << "]) = " << w5.scalar_value << std::endl;
+        Eigen::VectorXd seed = Eigen::VectorXd::Ones(weights.cols());
+        w5.evaluate();
+        std::cout << "f(w = [" << weights << "]) = " << w5.scalar_value << std::endl;
 
-    w5.derive(seed);
-    std::cout << "∂f/∂w = " << w1.partial << std::endl;
+        w5.derive(seed);
+        std::cout << "∂f/∂w = " << w1.partial << std::endl;
+        weights.array() += (learning_rate * w1.partial.array());
+    }
     return true; 
 }

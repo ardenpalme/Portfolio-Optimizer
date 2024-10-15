@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
     Portfolio portfolio(market_data_vec);
     cout << portfolio << std::endl;
 
-    portfolio.optimize_sharpe(1);
+    portfolio.optimize_sharpe(700);
 
     return 0;
 }
