@@ -11,6 +11,8 @@
 #include "simdjson.h"
 #include "libcurl.hpp"
 
+#define TRADING_DAYS 365
+
 bool Market_Data::get_price_series_since(const std::string &start_date)
 {
     std::vector<double> price_series;
@@ -114,7 +116,7 @@ std::ostream& operator<<(std::ostream &os, const Market_Data &m_data) {
             data_iter++;
         }
         data_iter = m_data.returns.end() - 1;
-        os << " ... " << *data_iter << "] (" << m_data.returns.size() << " total)" << std::endl;
+        os << " ... " << *data_iter << "] (" << m_data.returns.size() << " total)";
     }
 
     return os;
@@ -182,7 +184,7 @@ void Portfolio::print_matricies()
 
 std::ostream& operator<<(std::ostream &os, const Portfolio &port) {
     os << "Allocations: "  
-       << "(Sharpe = " << port.sharpe_ratio << ")" << std::endl;
+       << "(Annualized Sharpe Ratio (ex-post) = " << port.sharpe_ratio << ")" << std::endl;
     int idx = 0;
     for(auto asset : port.assets) {
         os << "[" << asset.ticker << " " 
@@ -228,36 +230,35 @@ Portfolio::Portfolio(std::vector<Market_Data> _assets) : assets{_assets} {
 }
 
 bool Portfolio::optimize_sharpe(uint32_t num_epochs) { 
-    std::cout << "Sharpe Ratio Optimization" << std::endl;
+    double sharpe;
+    const double learning_rate = 0.01;
+    const double tolerance = 1e-9;
 
-    double sharpe, begin_sharpe, end_sharpe;
-    double learning_rate = 0.01;
+    std::cout << "Sharpe Ratio Optimization" << std::endl;
     for(int i=0; i<num_epochs; i++) {
 
         // Reinitialize the computation graph 
         AutoDiff::Variable w1(weights); 
-        AutoDiff::LinProd w2(&w1, mean);
-        AutoDiff::QuadProd w3(&w1, covariance);
-        AutoDiff::Pow w4(&w3, -0.5);
-        AutoDiff::ElemProd w5(&w4, &w2);
+        AutoDiff::LinProd w2(&w1, mean);            // Expected returns: w^T * mean
+        AutoDiff::QuadProd w3(&w1, covariance);     // Portfolio variance: w^T * Cov * w
+        AutoDiff::Pow w4(&w3, -0.5);                // Volatility: (w^T * Cov * w)^(-0.5)
+        AutoDiff::ElemProd w5(&w4, &w2);            // Sharpe ratio: (w^T * mean) / sqrt(w^T * Cov * w)
 
         Eigen::RowVectorXd seed = Eigen::RowVectorXd::Ones(weights.cols());
 
         w5.evaluate();
         sharpe = w5.scalar_value;
-        if(num_epochs == 0) begin_sharpe = sharpe;
         //std::cout << "S(w = [" << weights << "]) = " << w5.scalar_value << std::endl;
 
         w5.derive(seed);
         //std::cout << "∂S/∂w = " << w1.partial << std::endl;
-        const double tolerance = 1e-9;
         assert(std::abs(weights.array().sum() - 1.0) < tolerance);
 
         weights.array() += (learning_rate * w1.partial.array());
         weights.array() /= weights.array().sum();
     }
 
-    sharpe_ratio = sharpe;
+    sharpe_ratio = sharpe * std::sqrt(TRADING_DAYS);
 
     return true; 
 }
