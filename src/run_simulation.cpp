@@ -3,13 +3,25 @@
 #include "auto_diff.hpp"
 #include "market_data.hpp"
 
+namespace AutoDiff {
+    std::ostream& operator<<(std::ostream& os, Expression &expr) {
+        if(expr.is_vector){
+            os << "[vector] " << expr.value;
+        }else{
+            os << "[scalar] " << expr.scalar_value;
+        }
+        return os;
+    }
+}
+
 int main(int argc, char *argv[])
 {
     using namespace std;
 
     std::string assets[] = {
         {"X:BTCUSD"},
-        {"X:ETHUSD"}
+        {"X:ETHUSD"},
+        {"X:SOLUSD"}
     };
 
     std::vector<Market_Data> market_data_vec;
@@ -23,7 +35,7 @@ int main(int argc, char *argv[])
     Portfolio portfolio(market_data_vec);
     cout << portfolio << std::endl;
 
-    portfolio.optimize_sharpe(700);
+    portfolio.optimize_sharpe(100);
 
     return 0;
 }

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstdio>
+#include <algorithm>
 #include <Eigen/Dense>
 
 
@@ -24,7 +25,7 @@ class Portfolio {
     std::vector<Market_Data> assets;
     Eigen::RowVectorXd weights;
     Eigen::MatrixXd returns;
-    Eigen::VectorXd mean; 
+    Eigen::RowVectorXd mean; 
     Eigen::MatrixXd covariance;
 
 public:
@@ -43,14 +44,18 @@ public:
 
         returns = std::move(ret);
 
-        mean = returns.rowwise().mean();  
-        Eigen::MatrixXd centered = returns.colwise() - mean; // (X- X_bar)
+        Eigen::VectorXd mu = returns.rowwise().mean();  
+        Eigen::MatrixXd centered = returns.colwise() - mu; // (X- X_bar)
 
         int M = returns.cols();
         covariance = (centered * centered.transpose()) / (M - 1);
 
+        mean = mu.transpose();
+        std::cout << "Portfolio mean: [" << mean.rows() << " x " << mean.cols()  << "]" << std::endl
+                  << mean << std::endl << std::endl;
+
         std::srand(std::time(0)); 
-        Eigen::RowVectorXd init_weights = Eigen::RowVectorXd::Random(2).cwiseAbs();
+        Eigen::RowVectorXd init_weights = Eigen::RowVectorXd::Random(num_assets).cwiseAbs();
         init_weights /= init_weights.sum();
         weights = std::move(init_weights);
     }

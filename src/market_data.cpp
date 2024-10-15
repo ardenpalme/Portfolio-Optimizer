@@ -176,22 +176,26 @@ std::ostream& operator<<(std::ostream &os, const Portfolio &port) {
 
 
 bool Portfolio::optimize_sharpe(uint32_t num_epochs) { 
-    double learning_rate = 0.2;
+    double learning_rate = 0.25;
 
     for(int i=0; i<num_epochs; i++) {
-        AutoDiff::Variable w1(weights); 
-        AutoDiff::LinearProd w2(&w1, mean);
-        AutoDiff::VecT_Matrix_Vec w3(&w1, covariance);
-        AutoDiff::Power w4(&w3, -0.5);
-        AutoDiff::Multiply w5(&w4, &w2);
 
-        Eigen::VectorXd seed = Eigen::VectorXd::Ones(weights.cols());
+        // Reinitialize the computation graph 
+        AutoDiff::Variable w1(weights); 
+        AutoDiff::LinProd w2(&w1, mean);
+        AutoDiff::QuadProd w3(&w1, covariance);
+        AutoDiff::Pow w4(&w3, -0.5);
+        AutoDiff::ElemProd w5(&w4, &w2);
+
+        Eigen::RowVectorXd seed = Eigen::RowVectorXd::Ones(weights.cols());
+
         w5.evaluate();
         std::cout << "f(w = [" << weights << "]) = " << w5.scalar_value << std::endl;
 
         w5.derive(seed);
         std::cout << "∂f/∂w = " << w1.partial << std::endl;
         weights.array() += (learning_rate * w1.partial.array());
+        weights.array() /= weights.array().sum();
     }
     return true; 
 }
