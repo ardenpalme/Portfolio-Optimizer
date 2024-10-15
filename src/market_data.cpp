@@ -1,5 +1,10 @@
 #include <Eigen/Dense>
 #include <ctime>
+#include <cstdlib>
+#include <cstdio>
+#include <algorithm>
+#include <chrono>
+#include <iostream>
 
 #include "auto_diff.hpp"
 #include "market_data.hpp"
@@ -31,7 +36,9 @@ bool Market_Data::get_price_series_since(const std::string &start_date)
                     end_date,
                     api_key);
 
+#ifdef DEBUG_CURL_JSON
     std::cout << polygon_req << std::endl;
+#endif 
 
     simdjson::ondemand::document json_doc;
     simdjson::ondemand::parser parser;
@@ -147,11 +154,12 @@ namespace simdjson {
     }
 };
 
-std::ostream& operator<<(std::ostream &os, const Portfolio &port) {
+void Portfolio::print_matricies()
+{
     int M_max = 5;
-    std::cout << "[returns]: " << port.returns.rows() << " x " << port.returns.cols() << std::endl;
+    std::cout << "[returns]: " << returns.rows() << " x " << returns.cols() << std::endl;
     int j=0;
-    for(auto row : port.returns.rowwise()) {
+    for(auto row : returns.rowwise()) {
         int i=0;
         for(auto ele : row) {
             std::cout << ele << " ";
@@ -160,24 +168,70 @@ std::ostream& operator<<(std::ostream &os, const Portfolio &port) {
         std::cout << std::endl;
         if(++j > M_max) break;
     }
-
     std::cout << std::endl;
 
     std::cout << "[covariance]: " << std::endl;
-    for(auto row : port.covariance.rowwise()) {
+    for(auto row : covariance.rowwise()) {
         for(auto ele : row) {
             std::cout << ele << " ";
         }
         std::cout << std::endl;
     }
+    std::cout << std::endl;
+}
+
+std::ostream& operator<<(std::ostream &os, const Portfolio &port) {
+    os << "Allocations: "  
+       << "(Sharpe = " << port.sharpe_ratio << ")" << std::endl;
+    int idx = 0;
+    for(auto asset : port.assets) {
+        os << "[" << asset.ticker << " " 
+           << port.weights[idx++] << "]" << std::endl;
+    }
+    os << std::endl;
 
     return os;
 }
 
+Portfolio::Portfolio(std::vector<Market_Data> _assets) : assets{_assets} {
+    size_t num_assets = assets.size();
+    size_t data_len = assets.at(0).returns.size();
+    for(auto asset : assets) {
+        size_t len = asset.returns.size();
+        if(len < data_len) data_len = len;
+    }
+    
+    //std::cout << "N = " << num_assets << " M = " << data_len << std::endl;
+
+    Eigen::MatrixXd returns_NM(num_assets, data_len);
+    int row_idx = 0;
+    std::for_each(assets.begin(), assets.end(), [&](const auto &m_data){
+        std::vector<double> returns_vec = m_data.returns;
+        Eigen::Map<Eigen::RowVectorXd> row_vec(returns_vec.data(), data_len);
+        returns_NM.row(row_idx++) = row_vec;
+    });
+
+    returns = std::move(returns_NM);
+
+    Eigen::VectorXd mu = returns.rowwise().mean();  
+    Eigen::MatrixXd centered = returns.colwise() - mu; // (X- X_bar)
+
+    int M = returns.cols();
+    covariance = (centered * centered.transpose()) / (M - 1);
+
+    mean = std::move(mu.transpose());
+
+    std::srand(std::time(0)); 
+    Eigen::RowVectorXd init_weights = Eigen::RowVectorXd::Random(num_assets).cwiseAbs();
+    init_weights /= init_weights.sum();
+    weights = std::move(init_weights);
+}
 
 bool Portfolio::optimize_sharpe(uint32_t num_epochs) { 
-    double learning_rate = 0.25;
+    std::cout << "Sharpe Ratio Optimization" << std::endl;
 
+    double sharpe, begin_sharpe, end_sharpe;
+    double learning_rate = 0.01;
     for(int i=0; i<num_epochs; i++) {
 
         // Reinitialize the computation graph 
@@ -190,12 +244,20 @@ bool Portfolio::optimize_sharpe(uint32_t num_epochs) {
         Eigen::RowVectorXd seed = Eigen::RowVectorXd::Ones(weights.cols());
 
         w5.evaluate();
-        std::cout << "f(w = [" << weights << "]) = " << w5.scalar_value << std::endl;
+        sharpe = w5.scalar_value;
+        if(num_epochs == 0) begin_sharpe = sharpe;
+        //std::cout << "S(w = [" << weights << "]) = " << w5.scalar_value << std::endl;
 
         w5.derive(seed);
-        std::cout << "∂f/∂w = " << w1.partial << std::endl;
+        //std::cout << "∂S/∂w = " << w1.partial << std::endl;
+        const double tolerance = 1e-9;
+        assert(std::abs(weights.array().sum() - 1.0) < tolerance);
+
         weights.array() += (learning_rate * w1.partial.array());
         weights.array() /= weights.array().sum();
     }
+
+    sharpe_ratio = sharpe;
+
     return true; 
 }

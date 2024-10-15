@@ -25,7 +25,7 @@ FetchContent_Declare(
   GIT_TAG 3.4
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAUTODIFF_DEBUG")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAUTODIFF_DEBUG -DDEBUG_CURL_JSON")
 
 FetchContent_MakeAvailable(eigen)
 FetchContent_MakeAvailable(libcurl) 

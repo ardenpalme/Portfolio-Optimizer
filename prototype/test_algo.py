@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 import requests
 import numpy as np
+import pandas as pd
 import datetime
 import os
 
@@ -84,71 +85,74 @@ class MarketData:
 
     def get_perf_ratio(self):
         return self.mean_return / self.std_return
-            
-        
-
+           
 if __name__ == "__main__":
-    asset_1 = MarketData("BTCUSD", 365)
-    asset_2 = MarketData("ETHUSD", 365)
+    # Load asset data (e.g., daily price returns)
+    asset_1 = MarketData("BTCUSD", 3000)
+    asset_2 = MarketData("ETHUSD", 3000)
 
     asset_1.get_data()
     asset_2.get_data()
 
-    asset_1_2_cov = np.cov(asset_1.price_return, asset_2.price_return)
-    print(asset_1_2_cov, "")
-
-    '''
-    fig, axes = plt.subplots(1,2)
-    asset_1.plot_returns(axes[0])
-    asset_2.plot_returns(axes[1])
-    plt.show()
-    '''
-
+    # Stack daily asset returns into a 2D array (each row is an asset, each column is a daily return)
     asset_returns = np.array([asset_1.price_return, asset_2.price_return])
-    price_returns = torch.tensor(asset_returns, dtype=torch.float32, requires_grad=True)
-    w = torch.tensor(np.random.rand(1,2), dtype=torch.float32, requires_grad=True)  # Initial portfolio weights
+    
+    # Convert to torch tensor for gradient-based optimization
+    price_returns = torch.tensor(asset_returns, dtype=torch.float32, requires_grad=False)
 
-    # Risk-free rate
-    rf = 0.0
+    # Initial portfolio weights (random initialization)
+    w = torch.tensor(np.random.rand(1, 2), dtype=torch.float32, requires_grad=True)
 
-    # Learning rate for SGD
+    # Set the learning rate for manual updates
     learning_rate = 0.01
 
-    # Number of iterations (stopping criterion)
+    # Set risk-free rate (e.g., 0 for simplicity)
+    rf = 0.0  # Can be updated to actual risk-free rate if needed
+
+    # Number of iterations for optimization
     iterations = 1000
 
-    # Perform SGD for the specified number of iterations
     for i in range(iterations):
-        
-        # Zero the gradient from the previous iteration
-        w.grad = None
+        # Zero out gradients from previous iteration
+        if w.grad is not None:
+            w.grad.zero_()
 
-        rp = torch.matmul(w, price_returns)
+        # Normalize weights to ensure they sum to 1
+        w_normalized = torch.nn.functional.softmax(w, dim=1)
 
-        # Compute the mean return and standard deviation
+        # Portfolio returns calculation (weighted sum of individual asset returns)
+        rp = torch.matmul(w_normalized, price_returns)
+
+        # Calculate mean and standard deviation of portfolio returns (daily data)
         mean_rp = torch.mean(rp)
-        var_rp = torch.var(rp, unbiased=False)
-        std_rp = torch.sqrt(var_rp)
+        std_rp = torch.std(rp)
 
-        # Compute the Sharpe ratio
+        # Proper Sharpe ratio calculation (daily data)
         sharpe_ratio = (mean_rp - rf) / std_rp
 
-        # Compute the gradient of the Sharpe ratio with respect to weights
-        sharpe_ratio.backward()
+        # Maximize Sharpe ratio by minimizing negative Sharpe ratio
+        loss = -sharpe_ratio
+        loss.backward()
 
-        # Gradient of the weights
-        grad_w = w.grad
-
-        # Update the weights using the SGD update rule
+        # Manual update of weights using gradient descent
         with torch.no_grad():
-            w += learning_rate * grad_w
+            w += learning_rate * w.grad
 
-        # Optionally, print the progress
+        # Optionally, print progress
         if i % 100 == 0:
             print(f"Iteration {i+1}/{iterations}")
-            print(f"Weights: {w.detach().numpy()}")
+            print(f"Normalized Weights: {w_normalized.detach().numpy()}")
             print(f"Sharpe Ratio: {sharpe_ratio.item()}")
-            print(f"Gradient: {grad_w.numpy()}")
 
-    # Final optimized weights
-    print("Optimized Weights:", w.detach().numpy())
+    # Final optimized weights (normalized)
+    optimized_weights = torch.nn.functional.softmax(w, dim=1)
+    print("Optimized Weights (normalized):", optimized_weights.detach().numpy())
+
+    # Sharpe ratio calculation is already based on daily data
+    sharpe_ratio_daily = sharpe_ratio.item()
+    print(f"Final Daily Sharpe Ratio: {sharpe_ratio_daily}")
+
+    # Optionally annualize the Sharpe ratio for comparison with other tools
+    sharpe_ratio_annualized = sharpe_ratio_daily * np.sqrt(TRADING_DAYS)  # Annualize daily Sharpe ratio
+    print(f"Annualized Sharpe Ratio: {sharpe_ratio_annualized}")
+ 
