@@ -14,3 +14,4 @@ Sharpe Ratio Optimization
 Allocations: (Annualized Sharpe Ratio (ex-post) = 1.33971)
 [X:BTCUSD 0.139031]
 [X:ETHUSD 0.860969]
+
