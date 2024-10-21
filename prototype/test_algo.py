@@ -1,6 +1,10 @@
 import torch
 import matplotlib.pyplot as plt
-from scipy.stats import norm
+from scipy.integrate import quad
+from scipy.stats import norm, gaussian_kde
+from skopt import gp_minimize
+from skopt.space import Real
+from skopt.utils import use_named_args
 import requests
 import numpy as np
 import pandas as pd
@@ -86,8 +90,7 @@ class MarketData:
     def get_perf_ratio(self):
         return self.mean_return / self.std_return
            
-if __name__ == "__main__":
-    # Load asset data (e.g., daily price returns)
+def optimize_sharpe():
     asset_1 = MarketData("BTCUSD", 3000)
     asset_2 = MarketData("ETHUSD", 3000)
 
@@ -155,4 +158,78 @@ if __name__ == "__main__":
     # Optionally annualize the Sharpe ratio for comparison with other tools
     sharpe_ratio_annualized = sharpe_ratio_daily * np.sqrt(TRADING_DAYS)  # Annualize daily Sharpe ratio
     print(f"Annualized Sharpe Ratio: {sharpe_ratio_annualized}")
- 
+
+def omega_ratio_kde(returns, kde, threshold=0):
+    """Compute the Omega ratio using the KDE-approximated PDF."""
+    gain_region = lambda x: max(x - threshold, 0) * kde.evaluate(x)
+    loss_region = lambda x: max(threshold - x, 0) * kde.evaluate(x)
+
+    expected_gains, _ = quad(gain_region, threshold, np.inf)
+    expected_losses, _ = quad(loss_region, -np.inf, threshold)
+
+    return expected_gains / expected_losses if expected_losses != 0 else np.inf
+
+# Define a flexible search space for N assets
+N_ASSETS = 2  # Example with 2 assets; change this value for more assets
+dimensions = [Real(0.0, 1.0, name=f'weight_{i}') for i in range(N_ASSETS)]
+
+@use_named_args(dimensions=dimensions)
+def objective(**weights):
+    """Objective function to maximize the Omega ratio using 1xN weight vector."""
+    # Collect weights into a 1xN vector
+    w = np.array([weights[f'weight_{i}'] for i in range(N_ASSETS)])
+    
+    # Normalize weights to ensure they sum to 1
+    w /= np.sum(w)
+
+    # Compute portfolio returns
+    rp = np.dot(w, asset_returns)
+
+    # Fit KDE to portfolio returns
+    kde = gaussian_kde(rp, bw_method='silverman')
+
+    # Compute the Omega ratio (negative for minimization)
+    omega = omega_ratio_kde(rp, kde, threshold=0)
+
+    return -omega  # Minimize the negative Omega ratio
+
+if __name__ == "__main__":
+    # Example with 2 assets (BTCUSD and ETHUSD)
+    asset_1 = MarketData("BTCUSD", 3000)
+    asset_2 = MarketData("ETHUSD", 3000)
+
+    # Fetch data for both assets
+    asset_1.get_data()
+    asset_2.get_data()
+
+    # Stack asset returns (N assets x 3000 observations)
+    asset_returns = np.array([asset_1.price_return, asset_2.price_return])
+
+    # Run Bayesian optimization
+    result = gp_minimize(
+        func=objective,          # Objective function
+        dimensions=dimensions,   # Search space
+        n_calls=50,              # Number of evaluations
+        random_state=42          # Seed for reproducibility
+    )
+
+    # Extract optimal weights
+    optimal_weights = np.array([result.x[i] for i in range(N_ASSETS)])
+    optimal_weights /= np.sum(optimal_weights)  # Normalize weights
+
+    print("Optimal Weights:", optimal_weights)
+    print("Maximum Omega Ratio:", -result.fun) 
+    
+'''
+kde = gaussian_kde(rp, bw_method='silverman')
+x_values = np.linspace(rp.min(), rp.max(), 500)
+pdf_values = kde.evaluate(x_values)
+
+plt.hist(rp, bins=100, density=True, alpha=0.5, label='Empirical Distribution')
+plt.plot(x_values, pdf_values, label='KDE Fit (T-Student)', linewidth=2)
+plt.title('KDE Fit vs. Empirical Distribution')
+plt.xlabel('Returns')
+plt.ylabel('Density')
+plt.legend()
+plt.show()
+'''
