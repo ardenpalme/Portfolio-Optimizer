@@ -18,11 +18,20 @@ namespace AutoDiff
     struct Variable : public Expression
     {
         Eigen::RowVectorXd partial;
+        double partial_scalar;
+
+        Variable(double &_scalar_value) {
+            scalar_value = _scalar_value;
+            partial_scalar = 0.0;
+            is_vector = false;
+        }
+
         Variable(Eigen::RowVectorXd &_value) {
             value = _value;
             partial = Eigen::RowVectorXd::Zero(_value.cols());
             is_vector = true;
         }
+
         void evaluate() { 
 #ifdef AUTODIFF_DEBUG
             std::cout << "eval Var" << *this << std::endl;
@@ -32,8 +41,14 @@ namespace AutoDiff
 #ifdef AUTODIFF_DEBUG
             std::cout << "partial update [seed]" << seed << std::endl;
 #endif
-            partial = partial + seed;
+            if(is_vector) {
+                partial = partial + seed;
+            }else{
+                Eigen::RowVectorXd ones = Eigen::RowVectorXd::Ones(seed.cols());
+                partial_scalar += (ones * seed.transpose());
+            } 
         }
+        friend std::ostream& operator<<(std::ostream& os, Variable &expr);
     };
 
     struct LinProd : public Expression
@@ -72,7 +87,8 @@ namespace AutoDiff
         }
     };
 
-    struct QuadProd : public Expression {
+    struct QuadProd : public Expression 
+    {
         Expression *expr;
         Eigen::MatrixXd A;
 
@@ -187,6 +203,75 @@ namespace AutoDiff
 
             if(a->is_vector) b->derive(a->value.array() * seed.array());
             else b->derive(a->scalar_value * seed.array());
+        }
+    };
+
+    struct Sub : public Expression
+    {
+        Expression *a;
+        double b;
+        Sub(Expression *a, double b) : a(a), b(b) {
+            is_vector = a->is_vector;
+        }
+        void evaluate() {
+#ifdef AUTODIFF_DEBUG
+            std::cout << "enter eval Sub\n";
+#endif
+            a->evaluate();
+            if (a->is_vector) {
+                value = a->value.array() - b;
+            } else {
+                scalar_value = a->scalar_value - b;
+            }
+#ifdef AUTODIFF_DEBUG
+            std::cout << "eval Sub: " << *this << std::endl;
+            std::cout << "(expr: " << a << " b: " << b << ")" << std::endl;
+#endif
+        }
+        void derive(const Eigen::RowVectorXd &seed) {
+#ifdef AUTODIFF_DEBUG
+            std::cout << "derive Sub: [seed]" << seed << std::endl;
+#endif
+            a->derive(seed); 
+        }
+    };
+
+    struct Div : public Expression
+    {
+        Expression *numerator, *denominator;
+        Div(Expression *numerator, Expression *denominator) : numerator(numerator), denominator(denominator) {
+            is_vector = numerator->is_vector;
+        }
+        void evaluate() {
+#ifdef AUTODIFF_DEBUG
+            std::cout << "enter eval Div\n";
+#endif
+            numerator->evaluate();
+            denominator->evaluate();
+            if (is_vector) {
+                value = numerator->value.array() / denominator->value.array();
+            } else {
+                scalar_value = numerator->scalar_value / denominator->scalar_value;
+            }
+#ifdef AUTODIFF_DEBUG
+            std::cout << "eval Div: " << *this << std::endl;
+            std::cout << "(numerator: " << numerator << " denominator: " << denominator << ")" << std::endl;
+#endif
+        }
+        void derive(const Eigen::RowVectorXd &seed) {
+#ifdef AUTODIFF_DEBUG
+            std::cout << "derive Div: [seed]" << seed << std::endl;
+#endif
+            if (is_vector)
+            {
+                numerator->derive(seed.array() / denominator->value.array());
+                denominator->derive(-seed.array() * numerator->value.array() / denominator->value.array().square());
+            }
+            else
+            {
+                numerator->derive(seed.array() / denominator->scalar_value);
+                denominator->derive(-seed.array() * numerator->scalar_value / std::pow(denominator->scalar_value, 2));
+            }
         }
     };
 }

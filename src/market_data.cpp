@@ -1,15 +1,16 @@
-#include <Eigen/Dense>
 #include <ctime>
 #include <cstdlib>
 #include <cstdio>
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <Eigen/Dense>
 
 #include "auto_diff.hpp"
 #include "market_data.hpp"
 #include "simdjson.h"
 #include "libcurl.hpp"
+#include "bayes_optimizer.hpp"
 
 #define TRADING_DAYS 365
 
@@ -261,4 +262,18 @@ bool Portfolio::optimize_sharpe(uint32_t num_epochs) {
     sharpe_ratio = sharpe * std::sqrt(TRADING_DAYS);
 
     return true; 
+}
+
+void Portfolio::optimize_omega(uint32_t num_epochs) { 
+    KDE gauss_kernel("gaussian");
+    unique_ptr<OptObjective> omega = make_unique<Omega>(gauss_kernel);
+    BayesOptimizer bayes_opt(std::move(omega));
+
+    VectorXd new_weights = bayes_opt.optimize(returns, num_epochs);
+    
+    std::cout << "[ "; 
+    for (auto alloc : new_weights) {
+        std::cout << alloc << " ";
+    }
+    std::cout << "]" << std::endl; 
 }

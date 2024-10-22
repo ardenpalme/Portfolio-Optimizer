@@ -27,6 +27,7 @@ public:
     Portfolio(std::vector<Market_Data> _assets);
 
     bool optimize_sharpe(uint32_t num_epochs);
+    void optimize_omega(uint32_t num_epochs);
 
     void print_matricies();
     friend std::ostream& operator<<(std::ostream &os, const Portfolio &port);
