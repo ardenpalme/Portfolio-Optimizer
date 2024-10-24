@@ -25,5 +25,8 @@ int main(int argc, char *argv[])
     portfolio.optimize_sharpe(10);
     cout << portfolio << std::endl;
 
+    portfolio.optimize_omega();
+    cout << portfolio << std::endl;
+
     return 0;
 }

@@ -23,6 +23,7 @@ double Omega::operator()(const VectorXd& weights, const MatrixXd& asset_returns)
     double standard_dev =  std::sqrt(variance);
 
     VectorXd kde_values = kernel_estimator.evaluate(rp, 1.06 * standard_dev * pow(rp.size(), -0.2), rp);
+    std::cout << "KDE: [" << kde_values.rows() << " x " << kde_values.cols() << "]" << std::endl;
     double omega = omega_ratio_kde(rp, kde_values);
 
     return -omega;
@@ -82,6 +83,8 @@ pair<VectorXd, VectorXd> BayesOptimizer::gp_predict(
     double length_scale)
 {
     MatrixXd K = compute_covariance(X_train, length_scale) + noise * MatrixXd::Identity(X_train.rows(), X_train.rows());
+    std::cout << "K: " << K.rows() << " y_train: " << y_train.size() << std::endl;
+    assert(K.rows() == y_train.size() && "Mismatch between K and y_train sizes");
     VectorXd k_star(X_train.rows());
     for (int i = 0; i < X_train.rows(); ++i) {
         k_star(i) = rbf_kernel(X_train.row(i), x_new, length_scale);
@@ -97,10 +100,11 @@ pair<VectorXd, VectorXd> BayesOptimizer::gp_predict(
 }
 
 VectorXd BayesOptimizer::optimize(const MatrixXd& asset_returns, int n_calls) {
-    vector<VectorXd> X_train;
-    VectorXd y_train(n_calls);
 
     int num_assets = asset_returns.rows(); 
+
+    vector<VectorXd> X_train;
+    VectorXd y_train(num_assets);
 
     // Initialize with random points
     random_device rd;
@@ -118,6 +122,13 @@ VectorXd BayesOptimizer::optimize(const MatrixXd& asset_returns, int n_calls) {
 
     VectorXd best_weights = X_train[0];
     double best_value = y_train(0);
+
+    std::cout << "X_train:" << std::endl;
+    for (const auto& vec : X_train) {
+        std::cout << "[" << vec << "]" << std::endl;
+    }
+
+    std::cout << "y_train: " << "[" << y_train.transpose() << "]" << std::endl;
 
     for (int call = num_assets; call < n_calls; ++call) {
         // GP Prediction and UCB Acquisition
